@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Ops Monde</title>
-    <link>https://muhannad0.github.io/</link>
-    <description>Recent content on Ops Monde</description>
+    <title>blog on Ops Monde</title>
+    <link>https://muhannad0.github.io/tags/blog/</link>
+    <description>Recent content in blog on Ops Monde</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en</language>
     <lastBuildDate>Sun, 19 Apr 2020 23:35:40 +0500</lastBuildDate>
     
-	<atom:link href="https://muhannad0.github.io/index.xml" rel="self" type="application/rss+xml" />
+	<atom:link href="https://muhannad0.github.io/tags/blog/index.xml" rel="self" type="application/rss+xml" />
     
     
     <item>
