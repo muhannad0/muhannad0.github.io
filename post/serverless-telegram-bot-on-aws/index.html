@@ -1,0 +1,91 @@
+<!doctype html><html lang=en><head><meta name=generator content="Hugo 0.69.0"><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=author content="Mohamed Muhannad"><meta name=keywords content="dev,nodejs,serverless,aws,telegram,bot"><meta name=description content="I’ve always wanted to try out to build a small chat bot. So, I decided to take a serverless approach to it."><meta property="og:title" content="Building a Serverless Telegram Bot on AWS"><meta property="og:description" content="I’ve always wanted to try out to build a small chat bot. So, I decided to take a serverless approach to it."><meta property="og:type" content="article"><meta property="og:url" content="https://muhannad0.github.io/post/serverless-telegram-bot-on-aws/"><meta property="og:image" content="https://muhannad0.github.io/images/post-images/sls_tgbot_coverimage.png"><meta property="article:published_time" content="2020-06-21T00:34:19+05:00"><meta property="article:modified_time" content="2020-06-21T00:34:19+05:00"><meta name=twitter:card content="summary_large_image"><meta name=twitter:image content="https://muhannad0.github.io/images/post-images/sls_tgbot_coverimage.png"><meta name=twitter:title content="Building a Serverless Telegram Bot on AWS"><meta name=twitter:description content="I’ve always wanted to try out to build a small chat bot. So, I decided to take a serverless approach to it."><link rel=icon type=image/png href=/favicon-32x32.png sizes=32x32><link rel=icon type=image/png href=/favicon-16x16.png sizes=16x16><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/normalize.css><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/main.css><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/all.css><link rel=stylesheet href=https://muhannad0.github.io/css/katex.min.css crossorigin=anonymous><script defer src=https://muhannad0.github.io/js/katex.min.js integrity=sha384-y23I5Q6l+B6vatafAwxRu/0oK/79VlbSz7Q9aiSZUvyWYIYsd+qj+o24G5ZU2zJz crossorigin=anonymous></script><script defer src=https://muhannad0.github.io/js/auto-render.min.js integrity=sha384-kWPLUVMOks5AQFrykwIup5lo0m3iMkkHrD0uJ4H5cjeGihAutqP0yW0J6dpFiVkI crossorigin=anonymous onload=renderMathInElement(document.body);></script><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/css/custom.css><title>Building a Serverless Telegram Bot on AWS | Muhannad.0</title></head><body><header><div id=avatar><a href=https://muhannad0.github.io/><img src=/images/avatar.jpg alt=Muhannad.0></a></div><div id=titletext><h2 id=title><a href=https://muhannad0.github.io/>Muhannad.0</a></h2></div><div id=title-description><p id=subtitle>mostly about cloud, automation, IT infra, ops. but wait, there&rsquo;s more&mldr;</p><div id=social><nav><ul><li><a href=https://github.com/muhannad0/><i title=Github class="icons fab fa-github"></i></a></li><li><a href=https://www.linkedin.com/in/muhannad0/><i title=LinkedIn class="icons fab fa-linkedin"></i></a></li><li><a href=https://twitter.com/monde_><i title=Twitter class="icons fab fa-twitter"></i></a></li></ul></nav></div></div><div id=mainmenu><nav><ul><li><a href=/>Home</a></li><li><a href=/post>All Posts</a></li><li><a href=/about>About</a></li><li><a href=/tags>Tags</a></li><li><a href=/categories>Categories</a></li></ul></nav></div></header><main><div class=post><div class=author></div><div class=post-header><div class=meta><div class=date><span class=day>21</span>
+<span class=rest>Jun 2020</span></div></div><div class=matter><h1 class=title>Building a Serverless Telegram Bot on AWS</h1></div></div><div class=markdown><p>Nowadays, chat bots are frequently used on instance messaging platforms to send notifications, host/play games, moderate groups, check for services etc. I&rsquo;ve always wanted to try out to build a small notification bot myself. So, I decided to take a serverless approach to it.</p><p>I chose <a href=https://telegram.org/>Telegram</a> for this project as their <a href=https://core.telegram.org/bots>Bot API</a> was quite easy to understand. There are also very useful bot frameworks built around the API, so I could get started quickly.
+<img src=/images/post-images/sls_tgbot_coverimage.png alt=cover_image></p><h2 id=features-included>Features Included</h2><p>The goal of this project is to get the basics working and build more features as we go.</p><ul><li>Automatically setup and an API endpoint (called a webhook) for Telegram to send updates (ie. whenever any message is sent to the bot).</li><li>Have the bot respond to a few commands.</li></ul><p><img src=/images/post-images/sls_tgbot_general_idea.png alt="general diagram"></p><p>The project is available on <a href=https://github.com/muhannad0/telegram-notify-bot-serverless>Github</a> if you wish you try it out yourself.</p><h2 id=create-the-bot>Create the Bot</h2><p>Check out the guide from Telegram to create your bot. The instructions are straighforward. The important piece here is to get the <code>token</code> which is used to make authorized requests to the <a href=https://core.telegram.org/bots/api>Bot API</a>.
+<img src=/images/post-images/sls_tgbot_botfather.png alt=tg_botfather></p><h2 id=lambda-code-walkthrough>Lambda Code Walkthrough</h2><p>I&rsquo;m using NodeJS for the the Lambda code here. I&rsquo;m not going to dive in too much into the code detail, but I&rsquo;ll highlight some of the important parts in this code.</p><p>The structure of the code is made up of 2 functions, that are triggered based on which API endpoint is called.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#75715e>// handler.js
+</span><span style=color:#75715e></span>
+<span style=color:#75715e>// setup the bot
+</span><span style=color:#75715e></span>
+<span style=color:#75715e>// hello function handles updates(messages) sent from Telegram to the webhook API
+</span><span style=color:#75715e></span><span style=color:#a6e22e>module</span>.<span style=color:#a6e22e>exports</span>.<span style=color:#a6e22e>hello</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>async</span> <span style=color:#a6e22e>event</span> =&gt; {
+    <span style=color:#75715e>// using a try/catch block
+</span><span style=color:#75715e></span>    <span style=color:#66d9ef>try</span> {
+      <span style=color:#75715e>// process event data
+</span><span style=color:#75715e></span>      <span style=color:#66d9ef>const</span> <span style=color:#a6e22e>body</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>JSON</span>.<span style=color:#a6e22e>parse</span>(<span style=color:#a6e22e>event</span>.<span style=color:#a6e22e>body</span>);
+
+      <span style=color:#75715e>// bot handles processed data from the event body
+</span><span style=color:#75715e></span>      <span style=color:#a6e22e>await</span> <span style=color:#a6e22e>bot</span>.<span style=color:#a6e22e>handleUpdates</span>(<span style=color:#a6e22e>body</span>);
+
+      <span style=color:#75715e>// return an Ok response
+</span><span style=color:#75715e></span>    } <span style=color:#66d9ef>catch</span> (<span style=color:#a6e22e>err</span>) {
+      <span style=color:#75715e>// handle any errors
+</span><span style=color:#75715e></span>
+      <span style=color:#75715e>// return any Err responses
+</span><span style=color:#75715e></span>    }
+}
+
+<span style=color:#75715e>// setWebhook function handles initial webhook setup for Telegram
+</span><span style=color:#75715e></span><span style=color:#a6e22e>module</span>.<span style=color:#a6e22e>exports</span>.<span style=color:#a6e22e>setWebhook</span> <span style=color:#f92672>=</span> <span style=color:#a6e22e>async</span> <span style=color:#a6e22e>event</span> =&gt; {
+    <span style=color:#75715e>// using a try/catch block
+</span><span style=color:#75715e></span>    <span style=color:#66d9ef>try</span> {
+      <span style=color:#75715e>// process webhook url based on event data
+</span><span style=color:#75715e></span>      <span style=color:#66d9ef>let</span> <span style=color:#a6e22e>url</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#39;https://&#39;</span> <span style=color:#f92672>+</span> <span style=color:#a6e22e>event</span>.<span style=color:#a6e22e>headers</span>.<span style=color:#a6e22e>Host</span> <span style=color:#f92672>+</span> <span style=color:#e6db74>&#39;/&#39;</span> <span style=color:#f92672>+</span> <span style=color:#a6e22e>event</span>.<span style=color:#a6e22e>requestContext</span>.<span style=color:#a6e22e>stage</span>
+        <span style=color:#f92672>+</span> <span style=color:#e6db74>&#39;/webhook&#39;</span>;
+
+      <span style=color:#75715e>// use bot methods to set the webhook url
+</span><span style=color:#75715e></span>      <span style=color:#a6e22e>await</span> <span style=color:#a6e22e>bot</span>.<span style=color:#a6e22e>telegram</span>.<span style=color:#a6e22e>setWebhook</span>(<span style=color:#a6e22e>url</span>);
+
+      <span style=color:#75715e>// return an Ok response
+</span><span style=color:#75715e></span>    } <span style=color:#66d9ef>catch</span> (<span style=color:#a6e22e>err</span>) {
+      <span style=color:#75715e>// handle any errors
+</span><span style=color:#75715e></span>
+      <span style=color:#75715e>// return any Err responses
+</span><span style=color:#75715e></span>    }
+}
+</code></pre></div><h2 id=telegraf-bot-framework>Telegraf Bot Framework</h2><p><a href=https://telegraf.js.org/>Telegraf</a> is a Telegram Bot Framework for NodeJS which has a good set of features and is easy to use. In this example I&rsquo;m implementing a few commands that the bot will respond to using this framework.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-js data-lang=js><span style=color:#75715e>// setup the bot
+</span><span style=color:#75715e></span><span style=color:#66d9ef>const</span> { <span style=color:#a6e22e>Telegraf</span> } <span style=color:#f92672>=</span> <span style=color:#a6e22e>require</span>(<span style=color:#e6db74>&#39;telegraf&#39;</span>);
+<span style=color:#66d9ef>const</span> <span style=color:#a6e22e>bot</span> <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> <span style=color:#a6e22e>Telegraf</span>(<span style=color:#a6e22e>process</span>.<span style=color:#a6e22e>env</span>.<span style=color:#a6e22e>BOT_TOKEN</span>);
+
+<span style=color:#75715e>// set a start command
+</span><span style=color:#75715e></span><span style=color:#a6e22e>bot</span>.<span style=color:#a6e22e>start</span>((<span style=color:#a6e22e>ctx</span>) =&gt; {
+      <span style=color:#66d9ef>return</span> <span style=color:#a6e22e>ctx</span>.<span style=color:#a6e22e>reply</span>(<span style=color:#e6db74>&#39;Hello from Lambda! Use /help to view available commands.&#39;</span>);
+});
+
+<span style=color:#75715e>// bot handles processed data from the event body
+</span><span style=color:#75715e></span><span style=color:#a6e22e>await</span> <span style=color:#a6e22e>bot</span>.<span style=color:#a6e22e>handleUpdates</span>(<span style=color:#a6e22e>body</span>);
+</code></pre></div><h2 id=deploy-using-serverless-framework>Deploy using Serverless Framework</h2><p>Using the Serverless Framework, we can define all the resources required in a <code>.yml</code> file and it will go deploy the application on AWS.</p><p>I already talked about how I used it in an earlier <a href=/post/phase4-using-infra-as-code-cloudresumechallenge/>post</a>. But there are some important things to note in this setup highlighted below.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=color:#75715e># set the BOT_TOKEN as an environment variable so that it </span>
+<span style=color:#75715e># is accessible to the function</span>
+
+<span style=color:#75715e># define env variables under provider section</span>
+<span style=color:#66d9ef>provider</span>:
+  <span style=color:#66d9ef>name</span>: aws
+  <span style=color:#66d9ef>runtime</span>: nodejs12.x
+  <span style=color:#66d9ef>environment</span>:
+    <span style=color:#66d9ef>BOT_TOKEN</span>: ${file(./serverless.env.yml):TELEGRAM_TOKEN, <span style=color:#e6db74>&#39;&#39;</span>}
+
+<span style=color:#75715e># define functions and their API endpoints</span>
+<span style=color:#66d9ef>functions</span>:
+  <span style=color:#66d9ef>hello</span>:
+    <span style=color:#66d9ef>handler</span>: handler.hello
+    <span style=color:#66d9ef>events</span>:
+      - <span style=color:#66d9ef>http</span>:
+          <span style=color:#66d9ef>path</span>: webhook
+          <span style=color:#66d9ef>method</span>: post
+          <span style=color:#66d9ef>cors</span>: <span style=color:#66d9ef>true</span>
+
+  <span style=color:#66d9ef>set-webhook</span>:
+    <span style=color:#66d9ef>handler</span>: handler.setWebhook
+    <span style=color:#66d9ef>events</span>:
+      - <span style=color:#66d9ef>http</span>:
+          <span style=color:#66d9ef>path</span>: setWebhook
+          <span style=color:#66d9ef>method</span>: post
+          <span style=color:#66d9ef>cors</span>: <span style=color:#66d9ef>true</span>
+</code></pre></div><p>Deploy by running <code>serverless deploy</code> on the terminal and that&rsquo;s it. After a few minutes your application will be setup on AWS.</p><p>It&rsquo;ll show the output of the configuration once completed.
+<img src=/images/post-images/sls_tgbot_info.png alt=sls_output></p><h2 id=get-updates-from-telegram-via-webhook>Get Updates from Telegram via Webhook</h2><p>There are 2 ways of <a href=https://core.telegram.org/bots/api#getting-updates>getting updates</a> from Telegram; polling and webhook. Since this is a serverless application and functions are triggered on events, we&rsquo;ll be using the webhook method.</p><p>So, as the final step, register the bot&rsquo;s webhook URL with Telegram by calling the <code>setWebhook</code> API endpoint.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback>curl -X POST https://&lt;api_gateway_url&gt;/prod/setWebhook
+</code></pre></div><p>And that&rsquo;s about it!</p><h2 id=test-the-bot>Test the Bot</h2><p>Send a few commands and check out the replies.</p><p><img src=/images/post-images/sls_tgbot_responses.png alt=tg_botchat></p><h2 id=final-thoughts>Final Thoughts</h2><ul><li>Most of the time for this project was spent on figuring out how to use the bot framework and NodeJS as this is my first time using the language.</li><li>I think I should have a separate file to implement the bot functionality and have the <code>handler</code> refer to it. That way it would be more modular and I can update parts of the application easily.</li></ul><h2 id=references>References</h2><ul><li><a href=https://github.com/serverless/examples/tree/master/aws-python-telegram-bot>Serverless Telegram Bot - Python Example</a>. This NodeJS port is based on the original Python code structure.</li><li><a href=https://telegraf.js.org/>Telegraf; Telegram Bot Framework</a></li><li><a href=https://core.telegram.org/bots/webhooks>Marvin&rsquo;s Marvellous Guide to All Things Webhook</a>. This guide is very useful to know the structure of the <code>JSON</code> updates sent by Telegram.</li></ul></div><div class=tags><div class=taxosfloating_left><p>Categories</p></div><div class=termsfloating_right><p><a href=/categories/blog/>blog</a>
+<a href=/categories/guide/>guide</a></div><div class=clearit></div><div class=taxosfloating_left><p>Tags</p></div><div class=termsfloating_right><p><a href=/tags/aws/>aws</a>
+<a href=/tags/bot/>bot</a>
+<a href=/tags/dev/>dev</a>
+<a href=/tags/nodejs/>nodejs</a>
+<a href=/tags/serverless/>serverless</a>
+<a href=/tags/telegram/>telegram</a></div><div class=clearit></div></div></div></main><footer><a href=https://github.com/dataCobra/hugo-vitae>Vitae</a> theme for <a href=https://gohugo.io>Hugo</a>
+<script type=application/javascript>var doNotTrack=false;if(!doNotTrack){window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-166606040-1','auto');ga('send','pageview');}</script><script async src=https://www.google-analytics.com/analytics.js></script></footer></body></html>
