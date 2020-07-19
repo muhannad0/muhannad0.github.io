@@ -1,0 +1,159 @@
+<!doctype html><html lang=en><head><meta name=generator content="Hugo 0.69.0"><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=author content="Mohamed Muhannad"><meta name=keywords content="dev,python,aws,testing"><meta name=description content="Recently, I had to write some tests for functions that called AWS services in Python. I found the 'moto' library which provides mocks for a lot of the AWS services for your tests. This is a basic example of using moto to test DynamoDB operations."><meta property="og:title" content="Using Moto to mock test AWS services: A DynamoDB Example"><meta property="og:description" content="Recently, I had to write some tests for functions that called AWS services in Python. I found the 'moto' library which provides mocks for a lot of the AWS services for your tests. This is a basic example of using moto to test DynamoDB operations."><meta property="og:type" content="article"><meta property="og:url" content="https://muhannad0.github.io/post/using-moto-to-mock-test-aws-a-dynamodb-example/"><meta property="og:image" content="https://muhannad0.github.io/images/post-images/mock_test_twit_card.png"><meta property="article:published_time" content="2020-07-19T00:54:48+05:00"><meta property="article:modified_time" content="2020-07-19T00:54:48+05:00"><meta name=twitter:card content="summary_large_image"><meta name=twitter:image content="https://muhannad0.github.io/images/post-images/mock_test_twit_card.png"><meta name=twitter:title content="Using Moto to mock test AWS services: A DynamoDB Example"><meta name=twitter:description content="Recently, I had to write some tests for functions that called AWS services in Python. I found the 'moto' library which provides mocks for a lot of the AWS services for your tests. This is a basic example of using moto to test DynamoDB operations."><link rel=icon type=image/png href=/favicon-32x32.png sizes=32x32><link rel=icon type=image/png href=/favicon-16x16.png sizes=16x16><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/normalize.css><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/main.css><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/all.css><link rel=stylesheet href=https://muhannad0.github.io/css/katex.min.css crossorigin=anonymous><script defer src=https://muhannad0.github.io/js/katex.min.js integrity=sha384-y23I5Q6l+B6vatafAwxRu/0oK/79VlbSz7Q9aiSZUvyWYIYsd+qj+o24G5ZU2zJz crossorigin=anonymous></script><script defer src=https://muhannad0.github.io/js/auto-render.min.js integrity=sha384-kWPLUVMOks5AQFrykwIup5lo0m3iMkkHrD0uJ4H5cjeGihAutqP0yW0J6dpFiVkI crossorigin=anonymous onload=renderMathInElement(document.body);></script><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/css/custom.css><title>Using Moto to mock test AWS services: A DynamoDB Example | Muhannad.0</title></head><body><header><div id=avatar><a href=https://muhannad0.github.io/><img src=/images/avatar.jpg alt=Muhannad.0></a></div><div id=titletext><h2 id=title><a href=https://muhannad0.github.io/>Muhannad.0</a></h2></div><div id=title-description><p id=subtitle>mostly about cloud, automation, IT infra, ops. but wait, there&rsquo;s more&mldr;</p><div id=social><nav><ul><li><a href=https://github.com/muhannad0/><i title=Github class="icons fab fa-github"></i></a></li><li><a href=https://www.linkedin.com/in/muhannad0/><i title=LinkedIn class="icons fab fa-linkedin"></i></a></li><li><a href=https://twitter.com/monde_><i title=Twitter class="icons fab fa-twitter"></i></a></li></ul></nav></div></div><div id=mainmenu><nav><ul><li><a href=/>Home</a></li><li><a href=/post>All Posts</a></li><li><a href=/about>About</a></li><li><a href=/tags>Tags</a></li><li><a href=/categories>Categories</a></li></ul></nav></div></header><main><div class=post><div class=author></div><div class=post-header><div class=meta><div class=date><span class=day>19</span>
+<span class=rest>Jul 2020</span></div></div><div class=matter><h1 class=title>Using Moto to mock test AWS services: A DynamoDB Example</h1></div></div><div class=markdown><h1 id=why-mock-tests>Why mock tests?</h1><p>When running tests for functions that use AWS services, we would be calling actual services/resources on AWS if we didn&rsquo;t mock them. This is not a good idea because:</p><ul><li>Tests might end up changing actual data or resources on a production environment.</li><li>Tests might run slow due to latency issues.</li></ul><p><a href=https://github.com/spulec/moto>moto</a> is a really cool Python library that helped me a lot recently. It allows you to mock AWS services so that you can run unit tests locally, with expected responses from AWS, without actually calling any services/resources on AWS.</p><p>In this post, I&rsquo;ll be explaining an example of using this library to test DynamoDB operations using Python unittest.</p><p>The goal is to share a general idea of how to approach to writing unit tests for your app code and show how to use moto library.</p><h1 id=requirements>Requirements</h1><ul><li>Basic Python knowledge</li><li><code>boto3</code> and <code>moto</code> packages installed</li></ul><h1 id=example-movies-project>Example: Movies Project</h1><p>The Python and DynamoDB examples used in the <a href=https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.Python.html>AWS documentation</a> is a good reference point, so we can start writing some tests for a few functions.</p><p>We&rsquo;ll use 3 of the DynamoDB functions shown in the example.</p><ul><li>Create movies table</li><li>Put Movie</li><li>Get Movie</li></ul><p>Before we start, we need to think of how to structure them.</p><p>The general idea would be to:</p><ul><li>Create the mock database/table.</li><li>Run the function test.</li><li>Delete the mock database/table.</li></ul><p>Let&rsquo;s get to it then, step by step.</p><h1 id=testing-the-create-movies-table-function>Testing the create movies table function</h1><p>This function creates the DynamoDB table &lsquo;Movies&rsquo; with the primary-key <code>year</code> (partition-key) and <code>title</code> (sort-key).</p><script type=application/javascript src="https://gist.github.com/muhannad0/4bb9f5ad9b8eb13d8dbeb4b460a27d6d.js?file=MoviesCreateTable.py"></script><ul><li>Note that this function takes an argument <code>dynamodb</code>. (where the default argument value is set to <code>None</code> if no database resource is provided.)</li><li>As the example shows, if no resource is provided, it attempts to make a <code>dynamodb</code> resource by connecting to the local address, hence the <code>endpoint_url</code> is set to <code>http://localhost:8000</code>. Bascially, the function expects to have a local instance of DynamoDB running, if no resource is passed.</li><li>Now, just keep that argument in mind going in to the next steps.</li></ul><h2 id=create-a-new-file-for-our-test>Create a new file for our test.</h2><ul><li>Import a few modules that we will be using in our tests.</li></ul><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=color:#75715e># TestMovies.py</span>
+<span style=color:#f92672>from</span> pprint <span style=color:#f92672>import</span> pprint
+<span style=color:#f92672>import</span> unittest
+<span style=color:#f92672>import</span> boto3 <span style=color:#75715e># AWS SDK for Python</span>
+<span style=color:#f92672>from</span> botocore.exceptions <span style=color:#f92672>import</span> ClientError
+<span style=color:#f92672>from</span> moto <span style=color:#f92672>import</span> mock_dynamodb2 <span style=color:#75715e># since we&#39;re going to mock DynamoDB service</span>
+</code></pre></div><h2 id=define-a-test-class-for-our-database-operations>Define a test class for our database operations.</h2><ul><li>This will contain all the test methods. The example below is a skeleton for the test structure that we plan to use.</li></ul><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=color:#75715e># TestMovies.py</span>
+<span style=color:#f92672>from</span> pprint <span style=color:#f92672>import</span> pprint
+<span style=color:#f92672>import</span> unittest
+<span style=color:#f92672>import</span> boto3 <span style=color:#75715e># AWS SDK for Python</span>
+<span style=color:#f92672>from</span> botocore.exceptions <span style=color:#f92672>import</span> ClientError
+<span style=color:#f92672>from</span> moto <span style=color:#f92672>import</span> mock_dynamodb2 <span style=color:#75715e># since we&#39;re going to mock DynamoDB service</span>
+
+<span style=color:#66d9ef>class</span> <span style=color:#a6e22e>TestDatabaseFunctions</span>(unittest<span style=color:#f92672>.</span>TestCase):
+
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>setUp</span>(self):
+        <span style=color:#e6db74>&#34;&#34;&#34;
+</span><span style=color:#e6db74>        Create database resource and mock table
+</span><span style=color:#e6db74>        &#34;&#34;&#34;</span>
+        <span style=color:#66d9ef>pass</span>
+
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>tearDown</span>(self):
+        <span style=color:#e6db74>&#34;&#34;&#34;
+</span><span style=color:#e6db74>        Delete database resource and mock table
+</span><span style=color:#e6db74>        &#34;&#34;&#34;</span>
+        <span style=color:#66d9ef>pass</span>
+    
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>test_table_exists</span>(self):
+        <span style=color:#e6db74>&#34;&#34;&#34;
+</span><span style=color:#e6db74>        Test if our mock table is ready
+</span><span style=color:#e6db74>        &#34;&#34;&#34;</span>
+        <span style=color:#66d9ef>pass</span>
+
+<span style=color:#66d9ef>if</span> __name__ <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;__main__&#39;</span>:
+    unittest<span style=color:#f92672>.</span>main()
+</code></pre></div><p>Couple of important methods here is the use of <code>setUp</code> and <code>tearDown</code>. These methods are run before and after the actual test is run. So, all of our mock setup has to be done within these methods so that our test can use them.</p><h2 id=write-out-the-code-for-the-first-test>Write out the code for the first test.</h2><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=color:#75715e># TestMovies.py</span>
+<span style=color:#f92672>from</span> pprint <span style=color:#f92672>import</span> pprint
+<span style=color:#f92672>import</span> unittest
+<span style=color:#f92672>import</span> boto3 <span style=color:#75715e># AWS SDK for Python</span>
+<span style=color:#f92672>from</span> botocore.exceptions <span style=color:#f92672>import</span> ClientError
+<span style=color:#f92672>from</span> moto <span style=color:#f92672>import</span> mock_dynamodb2 <span style=color:#75715e># since we&#39;re going to mock DynamoDB service</span>
+
+<span style=color:#a6e22e>@mock_dynamodb2</span>
+<span style=color:#66d9ef>class</span> <span style=color:#a6e22e>TestDatabaseFunctions</span>(unittest<span style=color:#f92672>.</span>TestCase):
+
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>setUp</span>(self):
+        <span style=color:#e6db74>&#34;&#34;&#34;
+</span><span style=color:#e6db74>        Create database resource and mock table
+</span><span style=color:#e6db74>        &#34;&#34;&#34;</span>
+        self<span style=color:#f92672>.</span>dynamodb <span style=color:#f92672>=</span> boto3<span style=color:#f92672>.</span>resource(<span style=color:#e6db74>&#39;dynamodb&#39;</span>, region_name<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;us-east-1&#39;</span>)
+        
+        <span style=color:#f92672>from</span> MoviesCreateTable <span style=color:#f92672>import</span> create_movie_table
+        self<span style=color:#f92672>.</span>table <span style=color:#f92672>=</span> create_movie_table(self<span style=color:#f92672>.</span>dynamodb) 
+
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>tearDown</span>(self):
+        <span style=color:#e6db74>&#34;&#34;&#34;
+</span><span style=color:#e6db74>        Delete database resource and mock table
+</span><span style=color:#e6db74>        &#34;&#34;&#34;</span>
+        self<span style=color:#f92672>.</span>table<span style=color:#f92672>.</span>delete()
+        self<span style=color:#f92672>.</span>dynamodb<span style=color:#f92672>=</span>None
+    
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>test_table_exists</span>(self):
+        <span style=color:#e6db74>&#34;&#34;&#34;
+</span><span style=color:#e6db74>        Test if our mock table is ready
+</span><span style=color:#e6db74>        &#34;&#34;&#34;</span>
+        <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>test_table_exists</span>(self):
+        self<span style=color:#f92672>.</span>assertIn(<span style=color:#e6db74>&#39;Movies&#39;</span>, self<span style=color:#f92672>.</span>table<span style=color:#f92672>.</span>name) <span style=color:#75715e># check if the table name is &#39;Movies&#39;</span>
+
+<span style=color:#66d9ef>if</span> __name__ <span style=color:#f92672>==</span> <span style=color:#e6db74>&#39;__main__&#39;</span>:
+    unittest<span style=color:#f92672>.</span>main()
+</code></pre></div><p>Hm, that&rsquo;s a lot of things we&rsquo;ve written there. Let&rsquo;s break it down section by section.</p><h3 id=mocking-aws-dynamodb-using-moto>Mocking AWS DynamoDB using moto.</h3><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=color:#f92672>--</span>
+<span style=color:#a6e22e>@mock_dynamodb2</span>
+<span style=color:#66d9ef>class</span> <span style=color:#a6e22e>TestDatabaseFunctions</span>(unittest<span style=color:#f92672>.</span>TestCase):
+<span style=color:#f92672>--</span>
+</code></pre></div><ul><li><p><code>@mock_dynamodb2</code> is used as a <a href=https://realpython.com/primer-on-python-decorators/>decorator</a> that wraps the whole test class. This ensures that any calls to DynamoDB within the test methods are mocked.</p></li><li><p>It is important to have moto wrap a whole test class, as it maintains the state of the database and tables.</p></li></ul><h3 id=setting-up-the-mock-database-and-table>Setting up the mock database and table.</h3><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=color:#f92672>--</span>
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>setUp</span>(self):
+        <span style=color:#e6db74>&#34;&#34;&#34;
+</span><span style=color:#e6db74>        Create database resource and mock table
+</span><span style=color:#e6db74>        &#34;&#34;&#34;</span>
+        self<span style=color:#f92672>.</span>dynamodb <span style=color:#f92672>=</span> boto3<span style=color:#f92672>.</span>resource(<span style=color:#e6db74>&#39;dynamodb&#39;</span>, region_name<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;us-east-1&#39;</span>)
+        
+        <span style=color:#f92672>from</span> MoviesCreateTable <span style=color:#f92672>import</span> create_movie_table
+        self<span style=color:#f92672>.</span>table <span style=color:#f92672>=</span> create_movie_table(self<span style=color:#f92672>.</span>dynamodb) 
+<span style=color:#f92672>--</span>
+</code></pre></div><ul><li><p>The <code>self.dynamodb</code> is the mock DynamoDB resource that will be used for the test. We can rest assured that <code>moto</code> will take care of mocking the calls to create this resource.</p></li><li><p>The line <code>from MoviesCreateTable import create_movie_table</code> is we&rsquo;re going to use the <code>create_movie_table</code> function to create our mock table. After all we want to make sure we&rsquo;re using the table that is actually used in production and this helps us not rewrite a whole block of code to create a table.</p></li><li><p>A question you might ask is why don&rsquo;t we import all the functions at the top of the file? Most examples seems to use that. Well, in this case, if we do an import of a function that instantiates a <code>boto3</code> resource, it might actually make calls to AWS. To avoid this, we make sure all the mocks are established <strong>BEFORE</strong> the resources are setup. Hence, <strong>the import within the test method ensures that mock is already established</strong>.</p></li><li><p><code>self.table</code> is the mock table that will be used by the rest of the test methods. Remember that part about <code>dynamodb</code> argument, this is where we use it to pass the mock database resource to the function. This ensures that any operation is run on the mock resource and not the local database instance.</p></li></ul><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=color:#f92672>--</span>
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>tearDown</span>(self):
+        <span style=color:#e6db74>&#34;&#34;&#34;
+</span><span style=color:#e6db74>        Delete database resource and mock table
+</span><span style=color:#e6db74>        &#34;&#34;&#34;</span>
+        self<span style=color:#f92672>.</span>table<span style=color:#f92672>.</span>delete()
+        self<span style=color:#f92672>.</span>dynamodb<span style=color:#f92672>=</span>None
+<span style=color:#f92672>--</span>
+</code></pre></div><ul><li>Here, we&rsquo;re going to delete all the mock resources created once the test is finished. We don&rsquo;t want them to be hanging around when the next test method is run.</li></ul><h3 id=testing-the-function>Testing the function.</h3><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=color:#f92672>--</span>
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>test_table_exists</span>(self):
+        <span style=color:#e6db74>&#34;&#34;&#34;
+</span><span style=color:#e6db74>        Test if our mock table is ready
+</span><span style=color:#e6db74>        &#34;&#34;&#34;</span>
+        self<span style=color:#f92672>.</span>assertIn(<span style=color:#e6db74>&#39;Movies&#39;</span>, self<span style=color:#f92672>.</span>table<span style=color:#f92672>.</span>name) <span style=color:#75715e># check if the table name is &#39;Movies&#39;</span>
+<span style=color:#f92672>--</span>
+</code></pre></div><ul><li><p><code>self.assertIn('Movies', self.table.name)</code> checks if we got a matching value. <code>self.assertIn</code> is equivalent to saying check if a is in b. <code>self.table.name</code> should return us the value &lsquo;Movie&rsquo;.</p></li><li><p>If you&rsquo;re unsure of the output value, you can always print the result to confirm. For example, <code>pprint(self.table)</code>.</p></li><li><p>The use <code>self</code> is based on Object-Oriented concepts in Python. You can read more about it <a href=https://realpython.com/python3-object-oriented-programming/>here</a>.</p></li></ul><p>Phew! That&rsquo;s a load of stuff. Don&rsquo;t worry, it gets easier from here. We&rsquo;ve got all the stuff ready to run our tests. You know what, let&rsquo;s just run it to make sure we haven&rsquo;t broken anything. We should be able to get a pass on our single test.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-zsh data-lang=zsh><span style=color:#f92672>(</span>env<span style=color:#f92672>)</span> muhannad@LA04:/e/PROJECTS/moto-ddb-example$ python TestMovies.py -v
+test_table_exists <span style=color:#f92672>(</span>__main__.TestDatabaseFunctions<span style=color:#f92672>)</span> ... ok
+
+----------------------------------------------------------------------
+Ran <span style=color:#ae81ff>1</span> test in 0.164s
+
+OK
+<span style=color:#f92672>(</span>env<span style=color:#f92672>)</span> muhannad@LA04:/e/PROJECTS/moto-ddb-example$ 
+</code></pre></div><p>Woohoo! 🎉 It works! On to the real stuff now.</p><h1 id=testing-the-put-movie-function>Testing the put movie function</h1><p>This function creats an item in the <code>Movies</code> table. It takes in a few arguments like <code>title</code>, <code>year</code>, <code>plot</code> etc. and saves the item to the table.</p><script type=application/javascript src="https://gist.github.com/muhannad0/4bb9f5ad9b8eb13d8dbeb4b460a27d6d.js?file=MoviesPutItem.py"></script><ul><li>As mentioned earlier, this function also takes in the <code>dynamodb</code> argument in case you want to provide a different resource.</li></ul><h2 id=write-a-new-test-method-in-our-testing-class>Write a new test method in our testing class.</h2><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=color:#75715e># TestMovies.py</span>
+<span style=color:#f92672>--</span>
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>test_put_movie</span>(self):
+        <span style=color:#f92672>from</span> MoviesPutItem <span style=color:#f92672>import</span> put_movie
+
+        result <span style=color:#f92672>=</span> put_movie(<span style=color:#e6db74>&#34;The Big New Movie&#34;</span>, <span style=color:#ae81ff>2015</span>,
+                           <span style=color:#e6db74>&#34;Nothing happens at all.&#34;</span>, <span style=color:#ae81ff>0</span>, self<span style=color:#f92672>.</span>dynamodb)
+        
+        self<span style=color:#f92672>.</span>assertEqual(<span style=color:#ae81ff>200</span>, result[<span style=color:#e6db74>&#39;ResponseMetadata&#39;</span>][<span style=color:#e6db74>&#39;HTTPStatusCode&#39;</span>])
+<span style=color:#f92672>--</span>
+</code></pre></div><ul><li><p>As explained earlier, we&rsquo;re importing <code>put_movie</code> function within the test method to ensure that all operations are carried out on the mock resources.</p></li><li><p><code>result</code> stores the output returned from the <code>put_movie</code> method. Note that we&rsquo;re also passing the mock <code>self.dynamodb</code> resource along with the test data.</p></li><li><p><code>self.assertEqual(200, result['ResponseMetadata']['HTTPStatusCode'])</code> checks whether the value <code>200</code> is in the <code>HTTPStatusCode</code> response. This is the output returned on a successful put item.</p></li></ul><p>Let&rsquo;s run it and see if we get a pass.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-zsh data-lang=zsh><span style=color:#f92672>(</span>env<span style=color:#f92672>)</span> muhannad@LA04:/e/PROJECTS/moto-ddb-example$ python TestMovies.py -v
+test_put_movie <span style=color:#f92672>(</span>__main__.TestDatabaseFunctions<span style=color:#f92672>)</span> ... ok
+test_table_exists <span style=color:#f92672>(</span>__main__.TestDatabaseFunctions<span style=color:#f92672>)</span> ... ok
+
+----------------------------------------------------------------------
+Ran <span style=color:#ae81ff>2</span> tests in 0.305s
+
+OK
+<span style=color:#f92672>(</span>env<span style=color:#f92672>)</span> muhannad@LA04:/e/PROJECTS/moto-ddb-example$
+</code></pre></div><p>What did I tell you? It does get easier. 😁</p><h1 id=testing-the-get-movie-function>Testing the get movie function</h1><script type=application/javascript src="https://gist.github.com/muhannad0/4bb9f5ad9b8eb13d8dbeb4b460a27d6d.js?file=MoviesGetItem.py"></script><p>This function gets the movie details from the <code>Movies</code> table. It requires the arguments <code>title</code> and <code>year</code> to retrieve the item.</p><h2 id=write-a-new-test-method-in-our-testing-class-1>Write a new test method in our testing class.</h2><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=color:#75715e># TestMovies.py</span>
+<span style=color:#f92672>--</span>
+    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>test_get_movie</span>(self):
+        <span style=color:#f92672>from</span> MoviesPutItem <span style=color:#f92672>import</span> put_movie
+        <span style=color:#f92672>from</span> MoviesGetItem <span style=color:#f92672>import</span> get_movie
+
+        put_movie(<span style=color:#e6db74>&#34;The Big New Movie&#34;</span>, <span style=color:#ae81ff>2015</span>,
+                    <span style=color:#e6db74>&#34;Nothing happens at all.&#34;</span>, <span style=color:#ae81ff>0</span>, self<span style=color:#f92672>.</span>dynamodb)
+        result <span style=color:#f92672>=</span> get_movie(<span style=color:#e6db74>&#34;The Big New Movie&#34;</span>, <span style=color:#ae81ff>2015</span>, self<span style=color:#f92672>.</span>dynamodb)
+
+        self<span style=color:#f92672>.</span>assertEqual(<span style=color:#ae81ff>2015</span>, result[<span style=color:#e6db74>&#39;year&#39;</span>])
+        self<span style=color:#f92672>.</span>assertEqual(<span style=color:#e6db74>&#34;The Big New Movie&#34;</span>, result[<span style=color:#e6db74>&#39;title&#39;</span>])
+        self<span style=color:#f92672>.</span>assertEqual(<span style=color:#e6db74>&#34;Nothing happens at all.&#34;</span>, result[<span style=color:#e6db74>&#39;info&#39;</span>][<span style=color:#e6db74>&#39;plot&#39;</span>])
+        self<span style=color:#f92672>.</span>assertEqual(<span style=color:#ae81ff>0</span>, result[<span style=color:#e6db74>&#39;info&#39;</span>][<span style=color:#e6db74>&#39;rating&#39;</span>])
+<span style=color:#f92672>--</span>
+</code></pre></div><ul><li><p>We&rsquo;re importing 2 functions <code>put_movie</code> and <code>get_movie</code> from their respective files within the test method like before. This is so that we can reuse the code in our main app to add test data, retrieve it and check the results.</p></li><li><p><code>put_movie</code> method saves the item to the mock table.</p></li><li><p><code>result</code> stores the output which we&rsquo;re using for our asserts in the lines that follow.</p></li></ul><p>Running our tests should give us a pass if everything is ok.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-zsh data-lang=zsh><span style=color:#f92672>(</span>env<span style=color:#f92672>)</span> muhannad@LA04:/e/PROJECTS/moto-ddb-example$ python TestMovies.py -v
+test_get_movie <span style=color:#f92672>(</span>__main__.TestDatabaseFunctions<span style=color:#f92672>)</span> ... ok
+test_put_movie <span style=color:#f92672>(</span>__main__.TestDatabaseFunctions<span style=color:#f92672>)</span> ... ok
+test_table_exists <span style=color:#f92672>(</span>__main__.TestDatabaseFunctions<span style=color:#f92672>)</span> ... ok
+
+----------------------------------------------------------------------
+Ran <span style=color:#ae81ff>3</span> tests in 0.299s
+
+OK
+<span style=color:#f92672>(</span>env<span style=color:#f92672>)</span> muhannad@LA04:/e/PROJECTS/moto-ddb-example$
+</code></pre></div><p>Awesome! We can now confirm that our DynamoDB operations are written correctly.</p><p>Here&rsquo;s the final test file that we have written.</p><script type=application/javascript src="https://gist.github.com/muhannad0/4bb9f5ad9b8eb13d8dbeb4b460a27d6d.js?file=TestMovies.py"></script><h1 id=so-how-fast-does-mock-tests-run>So, how fast does mock tests run?</h1><p>Using a mock library has definitely made it easier and faster to run tests. I made a basic comparison of how long it took to run before and after using mocking in Github Actions CI.</p><h2 id=before>Before</h2><ul><li>Earlier, I launched a docker instance of DynamoDB before running the tests. The code would handle a local endpoint resource passed into the test methods.
+<img src=/images/post-images/mock_test_ghaction_time_before.png alt=mock_test_gha_before></li></ul><h2 id=after>After</h2><ul><li>Major improvement after switching to mock tests! About 40% faster.
+<img src=/images/post-images/mock_test_ghaction_time_after.png alt=mock_test_gha_before></li></ul><p><em>Note: This is a general observation based on runs on public Github Actions runners.</em></p><h1 id=conclusion>Conclusion</h1><p>It might feel like a hassle to add unit tests to your application, but personally I&rsquo;ve found that writing unit tests has helped me understand how the code works and tweaking it to make it more efficient and error free.</p><p>Mocking certain services/resources can help run tests faster locally and ensure that they would work when you actually deploy the app to AWS. Moto is definitely a library that shoud definitely be in your toolkit for your AWS/Python projects.</p><p>On a side note, the talk TATFT by <a href=https://twitter.com/bryanl>Bryan Liles</a> might be a source of motivation and inspiration (and laughs) to help get started with Behaviour/Test Driven Development.</p><div style=position:relative;padding-bottom:56.25%;height:0;overflow:hidden><iframe src=https://www.youtube.com/embed/QMU6SjMZq1Q style=position:absolute;top:0;left:0;width:100%;height:100%;border:0 allowfullscreen title="YouTube Video"></iframe></div><h1 id=references>References</h1><ul><li><a href=https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.Python.html>Getting Started Developing with Python and DynamoDB</a></li><li><a href=https://realpython.com/python-testing/>Getting Started with Testing in Python</a></li><li><a href=https://github.com/spulec/moto>Moto on Github</a></li></ul></div><div class=tags><div class=taxosfloating_left><p>Categories</p></div><div class=termsfloating_right><p><a href=/categories/guide/>guide</a></div><div class=clearit></div><div class=taxosfloating_left><p>Tags</p></div><div class=termsfloating_right><p><a href=/tags/aws/>aws</a>
+<a href=/tags/dev/>dev</a>
+<a href=/tags/python/>python</a>
+<a href=/tags/testing/>testing</a></div><div class=clearit></div></div></div></main><footer><a href=https://github.com/dataCobra/hugo-vitae>Vitae</a> theme for <a href=https://gohugo.io>Hugo</a>
+<script type=application/javascript>var doNotTrack=false;if(!doNotTrack){window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-166606040-1','auto');ga('send','pageview');}</script><script async src=https://www.google-analytics.com/analytics.js></script></footer></body></html>
