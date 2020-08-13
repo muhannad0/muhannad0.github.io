@@ -1,0 +1,211 @@
+<!doctype html><html lang=en><head><meta name=generator content="Hugo 0.69.0"><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=author content="Mohamed Muhannad"><meta name=keywords content="iac,devops,aws,cloudformation,ansible"><meta name=description content="An explainer of how I used Ansible and CloudFormation to deploy and configure EC2 instances on AWS."><meta property="og:title" content="AWS CloudFormation and Ansible: Provision and Configure EC2 Instances"><meta property="og:description" content="An explainer of how I used Ansible and CloudFormation to deploy and configure EC2 instances on AWS."><meta property="og:type" content="article"><meta property="og:url" content="https://muhannad0.github.io/post/ansible-and-cloudformation-provision-and-configure/"><meta property="og:image" content="https://muhannad0.github.io/images/post-images/ansible_cfn_cover_image.png"><meta property="article:published_time" content="2020-08-14T03:56:37+05:00"><meta property="article:modified_time" content="2020-08-14T03:56:37+05:00"><meta name=twitter:card content="summary_large_image"><meta name=twitter:image content="https://muhannad0.github.io/images/post-images/ansible_cfn_cover_image.png"><meta name=twitter:title content="AWS CloudFormation and Ansible: Provision and Configure EC2 Instances"><meta name=twitter:description content="An explainer of how I used Ansible and CloudFormation to deploy and configure EC2 instances on AWS."><link rel=icon type=image/png href=/favicon-32x32.png sizes=32x32><link rel=icon type=image/png href=/favicon-16x16.png sizes=16x16><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/normalize.css><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/main.css><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/all.css><link rel=stylesheet href=https://muhannad0.github.io/css/katex.min.css crossorigin=anonymous><script defer src=https://muhannad0.github.io/js/katex.min.js integrity=sha384-y23I5Q6l+B6vatafAwxRu/0oK/79VlbSz7Q9aiSZUvyWYIYsd+qj+o24G5ZU2zJz crossorigin=anonymous></script><script defer src=https://muhannad0.github.io/js/auto-render.min.js integrity=sha384-kWPLUVMOks5AQFrykwIup5lo0m3iMkkHrD0uJ4H5cjeGihAutqP0yW0J6dpFiVkI crossorigin=anonymous onload=renderMathInElement(document.body);></script><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/css/custom.css><title>AWS CloudFormation and Ansible: Provision and Configure EC2 Instances | Muhannad.0</title></head><body><header><div id=avatar><a href=https://muhannad0.github.io/><img src=/images/avatar.jpg alt=Muhannad.0></a></div><div id=titletext><h2 id=title><a href=https://muhannad0.github.io/>Muhannad.0</a></h2></div><div id=title-description><p id=subtitle>mostly about cloud, automation, IT infra, ops. but wait, there&rsquo;s more&mldr;</p><div id=social><nav><ul><li><a href=https://github.com/muhannad0/><i title=Github class="icons fab fa-github"></i></a></li><li><a href=https://www.linkedin.com/in/muhannad0/><i title=LinkedIn class="icons fab fa-linkedin"></i></a></li><li><a href=https://twitter.com/monde_><i title=Twitter class="icons fab fa-twitter"></i></a></li></ul></nav></div></div><div id=mainmenu><nav><ul><li><a href=/>Home</a></li><li><a href=/post>All Posts</a></li><li><a href=/about>About</a></li><li><a href=/tags>Tags</a></li><li><a href=/categories>Categories</a></li></ul></nav></div></header><main><div class=post><div class=author></div><div class=post-header><div class=meta><div class=date><span class=day>14</span>
+<span class=rest>Aug 2020</span></div></div><div class=matter><h1 class=title>AWS CloudFormation and Ansible: Provision and Configure EC2 Instances</h1></div></div><div class=markdown><h2 id=about-the-problem>About the Problem</h2><p>I got to work on a small project that invovled spinning up development environments for a webservice that runs on a few EC2 instances on AWS. Initially, I started out using a CloudFormation template to create EC2 instances and used <code>UserData</code> with the commands to configure the instances with the required packages and settings.</p><p>But as with all projects in IT, requirements changed frequently. I got annoyed updating the CloudFormation template/stack each time and thought of decoupling the EC2 instances creation and configuration. I had been using Ansible for a while, so I decided to use playbooks to configure the instances and CloudFormation to create the EC2 environment.</p><p>Even though I had separated the infrastructure components and the configuration, I still needed both tools (AWS CLI and Ansible) to get the whole thing running. Then I found that there are a lot of <a href=https://docs.ansible.com/ansible/latest/modules/list_of_cloud_modules.html#amazon>Ansible modules</a>, specifically for AWS. One of them was the <code>cloudformation</code>, which created the stack. So this meant I could create a playbook that looks like this.</p><p><img src=/images/post-images/ansible_cfn_workflow.png alt=image_ansible_workflow></p><p>Finally, I had a playbook that can do both, create the CloudFormation stack to create the environment, and then continue to configure the instances. Let&rsquo;s take a look at how I went about it.</p><h2 id=quick-introduction>Quick Introduction</h2><p><a href=https://aws.amazon.com/cloudformation/>CloudFormation</a> is a service that allows you to define resources on AWS in a template file. The service takes care of figuring out how to provision those resources (for example, EC2 instances) for you. This helps us setting up individual resources manually on the web console or CLI and use a standard template that can repeatedly carry out the provisioning for us, automatically, error free and much faster.</p><p><a href=https://www.ansible.com/>Ansible</a> is also a similar open-source tool, that automates provisioning and configuration. You can use it setup servers, configure Linux and Windows machines in an automated way. It also makes use of template files called playbooks that we can use to define the tasks that need to be run to provision and configure the system.</p><h2 id=prerequisites>Prerequisites</h2><ul><li><p><a href=https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html>AWS CLI</a> installed and <a href=https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html>credentials configured</a> on your machine.</p></li><li><p><a href=https://docs.ansible.com/ansible/latest/installation_guide/index.html>Ansible</a> installed on your machine.</p></li><li><p><a href=https://boto3.amazonaws.com/v1/documentation/api/latest/guide/quickstart.html>Boto3</a> and boto Python packages installed on your machine.</p></li><li><p><em>Note: The commands mentioned in this guide are for Linux terminal.</em></p></li></ul><p>It is expected to have basic knowledge on how to use Ansible and CloudFormation to follow this guide.</p><p>I found the following articles helpful when starting out using these tools.</p><ul><li><p><a href=https://www.digitalocean.com/community/tutorials/configuration-management-101-writing-ansible-playbooks>Configuration Management 101: Writing Ansible Playbooks</a> by <a href=https://twitter.com/erikaheidi>Erika Heidi</a>.</p></li><li><p><a href=https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/gettingstarted.templatebasics.html>AWS CloudFormation: Learn template basics</a></p></li></ul><h2 id=what-are-we-building>What are we building?</h2><p>As mentioned earlier, we are creating instances for a web application and database. This is meant for a quick dev/test environment that can be discarded once used.
+<img src=/images/post-images/ansible_cfn_architecture.png alt=image_architecture></p><h2 id=use-an-ssh-key-pair-to-access-the-instances>Use an SSH key pair to access the instances</h2><p>We need to create an SSH key pair that we will be using to access the EC2 instances once they&rsquo;re deployed.</p><p>Let&rsquo;s use the AWS CLI to create a key pair and save it.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback>aws ec2 create-key-pair --key-name my-key-pair --query &#39;KeyMaterial&#39; --output text &gt; my-key-pair.pem
+</code></pre></div><p>In order to use this key with an SSH client, use the following command to set the permissions.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback>chmod 400 my-key-pair.pem
+</code></pre></div><h2 id=cloudformation-template>CloudFormation Template</h2><p>This is the template that we will be using to create 2 EC2 instances, 2 Security Groups. We will be deploying them to the default VPC subnet.</p><p>In our working directory, let&rsquo;s create a file with the name <code>cfn-template.yml</code>.</p><h3 id=parameters>Parameters</h3><p>The template takes in a few parameter inputs:</p><ul><li><code>KeyName</code>: name of the key pair we created in the first step. You could also give an existing key pair name.</li><li><code>InstanceType</code>: this is the type of EC2 instance.</li><li><code>SSHLocation</code>: the current public IP from which you&rsquo;re running the playbook, so that we can SSH into the instances.</li></ul><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=color:#75715e># cfn-template.yml</span>
+<span style=color:#66d9ef>AWSTemplateFormatVersion</span>: <span style=color:#e6db74>&#34;2010-09-09&#34;</span>
+<span style=color:#66d9ef>Description</span>: Setup test environment with EC2 instances
+
+<span style=color:#66d9ef>Parameters</span>:
+  <span style=color:#66d9ef>KeyName</span>:
+    <span style=color:#66d9ef>Description</span>: Name of an existing EC2 KeyPair to enable SSH access
+    <span style=color:#66d9ef>Type</span>: <span style=color:#e6db74>&#39;AWS::EC2::KeyPair::KeyName&#39;</span>
+  <span style=color:#66d9ef>InstanceType</span>:
+    <span style=color:#66d9ef>Description</span>: EC2 instance type
+    <span style=color:#66d9ef>Type</span>: String
+    <span style=color:#66d9ef>Default</span>: t2.micro
+    <span style=color:#66d9ef>ConstraintDescription</span>: must be a valid EC2 instance type.
+  <span style=color:#66d9ef>SSHLocation</span>:
+    <span style=color:#66d9ef>Description</span>: The IP address range that can be used to SSH to the EC2 instances
+    <span style=color:#66d9ef>Type</span>: String
+    <span style=color:#66d9ef>MinLength</span>: <span style=color:#ae81ff>9</span>
+    <span style=color:#66d9ef>MaxLength</span>: <span style=color:#ae81ff>18</span>
+    <span style=color:#66d9ef>Default</span>: <span style=color:#ae81ff>0.0.0.0</span>/<span style=color:#ae81ff>0</span>
+    <span style=color:#66d9ef>AllowedPattern</span>: <span style=color:#e6db74>&#39;(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})&#39;</span>
+    <span style=color:#66d9ef>ConstraintDescription</span>: must be a valid IP CIDR range of the form x.x.x.x/x.
+</code></pre></div><h3 id=mappings>Mappings</h3><p>We add mappings so that our EC2 instances can select the required AMI. This allows a bit of flexibility as we would just add/change the region/AMI ID here, and reference the value in the <code>ImageId</code> property of the EC2 definition.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=color:#66d9ef>Mappings</span>:
+  <span style=color:#66d9ef>RegionMap</span>:
+    <span style=color:#66d9ef>us-east-1</span>:
+      <span style=color:#66d9ef>HVM64</span>: ami-02354e95b39ca8dec <span style=color:#75715e># use Amazon Linux 2 (64-bit x86)</span>
+      <span style=color:#75715e># HVM64: ami-0ac80df6eff0e70b5 # Ubuntu Server 18.04 LTS (64-bit x86)</span>
+</code></pre></div><h3 id=resources>Resources</h3><p>We have named resources here so that they can be referenced in other parts of the template.</p><ul><li>The 2 Security Groups with their ingress rules.<ul><li><code>WebInstanceSecurityGroup</code> has allowed incoming HTTP and SSH requests.</li><li><code>DbInstanceSecurityGroup</code> has allowed incoming MySQL from the <code>WebInstanceSecurityGroup</code> and SSH requests.</li></ul></li></ul><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=color:#66d9ef>Resources</span>:
+  <span style=color:#66d9ef>WebInstanceSecurityGroup</span>:
+    <span style=color:#66d9ef>Type</span>: AWS::EC2::SecurityGroup
+    <span style=color:#66d9ef>Properties</span>:
+      <span style=color:#66d9ef>GroupDescription</span>: Enable Web/SSH Access
+      <span style=color:#66d9ef>SecurityGroupIngress</span>:
+        - <span style=color:#66d9ef>IpProtocol</span>: tcp
+          <span style=color:#66d9ef>FromPort</span>: <span style=color:#ae81ff>22</span>
+          <span style=color:#66d9ef>ToPort</span>: <span style=color:#ae81ff>22</span>
+          <span style=color:#66d9ef>CidrIp</span>: !Ref SSHLocation
+        - <span style=color:#66d9ef>IpProtocol</span>: tcp
+          <span style=color:#66d9ef>FromPort</span>: <span style=color:#ae81ff>80</span>
+          <span style=color:#66d9ef>ToPort</span>: <span style=color:#ae81ff>80</span>
+          <span style=color:#66d9ef>CidrIp</span>: <span style=color:#ae81ff>0.0.0.0</span>/<span style=color:#ae81ff>0</span>
+  
+  <span style=color:#66d9ef>DbInstanceSecurityGroup</span>:
+    <span style=color:#66d9ef>Type</span>: AWS::EC2::SecurityGroup
+    <span style=color:#66d9ef>Properties</span>:
+      <span style=color:#66d9ef>GroupDescription</span>: Enable DB/SSH Access
+      <span style=color:#66d9ef>SecurityGroupIngress</span>:
+        - <span style=color:#66d9ef>IpProtocol</span>: tcp
+          <span style=color:#66d9ef>FromPort</span>: <span style=color:#ae81ff>22</span>
+          <span style=color:#66d9ef>ToPort</span>: <span style=color:#ae81ff>22</span>
+          <span style=color:#66d9ef>CidrIp</span>: !Ref SSHLocation
+        - <span style=color:#66d9ef>IpProtocol</span>: tcp
+          <span style=color:#66d9ef>FromPort</span>: <span style=color:#ae81ff>3306</span>
+          <span style=color:#66d9ef>ToPort</span>: <span style=color:#ae81ff>3306</span>
+          <span style=color:#66d9ef>SourceSecurityGroupId</span>: !GetAtt WebInstanceSecurityGroup.GroupId
+</code></pre></div><ul><li><p>The 2 EC2 Instances, <code>WebInstance</code> for web application and <code>DbInstance</code> for database.</p></li><li><p>Here we use <code>UserData</code> to update the OS and Python packages on boot up.</p></li></ul><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml>  <span style=color:#66d9ef>WebInstance</span>:
+    <span style=color:#66d9ef>Type</span>: AWS::EC2::Instance
+    <span style=color:#66d9ef>Properties</span>:
+      <span style=color:#66d9ef>InstanceType</span>: !Ref InstanceType
+      <span style=color:#66d9ef>SecurityGroups</span>:
+        - !Ref WebInstanceSecurityGroup
+      <span style=color:#66d9ef>KeyName</span>: !Ref KeyName
+      <span style=color:#66d9ef>ImageId</span>: !FindInMap [ RegionMap, !Ref <span style=color:#e6db74>&#34;AWS::Region&#34;</span>, HVM64 ]
+      <span style=color:#66d9ef>Tags</span>:
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;os&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;linux&#34;</span>
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;env&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;dev&#34;</span>
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;app&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;web&#34;</span>
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;deploy&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;ansible&#34;</span>
+      <span style=color:#66d9ef>UserData</span>:
+        <span style=color:#66d9ef>Fn::Base64</span>:
+          <span style=color:#66d9ef>Fn::Sub</span>: <span style=color:#e6db74>|
+</span><span style=color:#e6db74>            #!/bin/bash -xe</span>
+            sudo yum update -y
+            sudo yum install python-pip -y
+            sudo pip install --upgrade pip
+            sudo pip install --upgrade setuptools
+  
+  <span style=color:#66d9ef>DbInstance</span>:
+    <span style=color:#66d9ef>Type</span>: AWS::EC2::Instance
+    <span style=color:#66d9ef>Properties</span>:
+      <span style=color:#66d9ef>InstanceType</span>: !Ref InstanceType
+      <span style=color:#66d9ef>SecurityGroups</span>:
+        - !Ref DbInstanceSecurityGroup
+      <span style=color:#66d9ef>KeyName</span>: !Ref KeyName
+      <span style=color:#66d9ef>ImageId</span>: !FindInMap [ RegionMap, !Ref <span style=color:#e6db74>&#34;AWS::Region&#34;</span>, HVM64 ]
+      <span style=color:#66d9ef>Tags</span>:
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;os&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;linux&#34;</span>
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;env&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;dev&#34;</span>
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;app&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;db&#34;</span>
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;deploy&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;ansible&#34;</span>
+      <span style=color:#66d9ef>UserData</span>:
+        <span style=color:#66d9ef>Fn::Base64</span>:
+          <span style=color:#66d9ef>Fn::Sub</span>: <span style=color:#e6db74>|
+</span><span style=color:#e6db74>            #!/bin/bash -xe</span>
+            sudo yum update -y
+            sudo yum install python-pip -y
+            sudo pip install --upgrade pip
+            sudo pip install --upgrade setuptools
+</code></pre></div><h3 id=tagging>Tagging</h3><p>This is a very important step, tagging your resources with the right values. This helps us identify what this resource is and to which project/app/environment it belongs to. We will be using tags to correctly group the instances so that Ansible can run the correct tasks on each one.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml>      <span style=color:#66d9ef>Tags</span>:
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;os&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;linux&#34;</span>
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;env&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;dev&#34;</span>
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;app&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;db&#34;</span>
+        - <span style=color:#66d9ef>Key</span>: <span style=color:#e6db74>&#34;deploy&#34;</span>
+          <span style=color:#66d9ef>Value</span>: <span style=color:#e6db74>&#34;ansible&#34;</span>
+</code></pre></div><h3 id=outputs>Outputs</h3><p>We can add few outputs of the resources so that they can be referenced by another template if needed.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=color:#66d9ef>Outputs</span>:
+  <span style=color:#66d9ef>StackName</span>:
+    <span style=color:#66d9ef>Value</span>: !Ref <span style=color:#e6db74>&#34;AWS::StackName&#34;</span>
+  <span style=color:#66d9ef>WebInstanceDNS</span>:
+    <span style=color:#66d9ef>Value</span>: !GetAtt WebInstance.PublicDnsName
+  <span style=color:#66d9ef>DbInstanceDNS</span>:
+    <span style=color:#66d9ef>Value</span>: !GetAtt DbInstance.PublicDnsName
+  <span style=color:#66d9ef>WebSecurityGroupID</span>:
+    <span style=color:#66d9ef>Value</span>: !GetAtt WebInstanceSecurityGroup.GroupId
+  <span style=color:#66d9ef>DBSecurityGroupID</span>:
+    <span style=color:#66d9ef>Value</span>: !GetAtt DbInstanceSecurityGroup.GroupId
+</code></pre></div><h2 id=ansible-playbook>Ansible Playbook</h2><p>This is where Ansible comes in with a playbook to automate creation of the CloudFormation stack. We&rsquo;ll create a <code>provision.yml</code> file and start writing our playbook.</p><p>The first play is where we do our provisioning tasks. This run on the <code>localhost</code> (since our AWS CLI credentials are available in the local machine). We also set the variables required by the CloudFormation template.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml><span style=color:#75715e># provision.yml</span>
+---
+- <span style=color:#66d9ef>name</span>: Provision AWS
+  <span style=color:#66d9ef>hosts</span>: localhost
+  <span style=color:#66d9ef>gather_facts</span>: <span style=color:#66d9ef>false</span>
+  <span style=color:#66d9ef>connection</span>: local
+  <span style=color:#66d9ef>vars</span>:
+    <span style=color:#66d9ef>region</span>: us-east<span style=color:#ae81ff>-1</span>
+    <span style=color:#66d9ef>instance_type</span>: t2.micro
+    <span style=color:#66d9ef>keypair</span>: my-key-pair
+    <span style=color:#66d9ef>ssh_location</span>: <span style=color:#ae81ff>1.2.3.4</span>/<span style=color:#ae81ff>32</span>
+    <span style=color:#66d9ef>stack_name</span>: webapp-dev-stack<span style=color:#ae81ff>-1</span>
+</code></pre></div><h3 id=provisioning-the-stack>Provisioning the stack</h3><p>We create our first task where we use the <a href=https://docs.ansible.com/ansible/latest/modules/cloudformation_module.html><code>cloudformation</code></a> module in Ansible to create a stack.</p><p>The parameter values are referenced from the variables set earlier. This makes it more flexible to run the playbook based on different requirements.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml>  <span style=color:#66d9ef>tasks</span>:
+    - <span style=color:#66d9ef>name</span>: Create cfn stack
+      <span style=color:#66d9ef>cloudformation</span>:
+        <span style=color:#66d9ef>stack_name</span>: <span style=color:#e6db74>&#34;{{ stack_name }}&#34;</span>
+        <span style=color:#66d9ef>region</span>: <span style=color:#e6db74>&#34;{{ region }}&#34;</span>
+        <span style=color:#66d9ef>disable_rollback</span>: <span style=color:#66d9ef>true</span>
+        <span style=color:#66d9ef>state</span>: present
+        <span style=color:#66d9ef>template</span>: <span style=color:#e6db74>&#34;cfn_template.yml&#34;</span>
+        <span style=color:#66d9ef>template_parameters</span>:
+          <span style=color:#66d9ef>KeyName</span>: <span style=color:#e6db74>&#34;{{ keypair }}&#34;</span>
+          <span style=color:#66d9ef>InstanceType</span>: <span style=color:#e6db74>&#34;{{ instance_type }}&#34;</span>
+          <span style=color:#66d9ef>SSHLocation</span>: <span style=color:#e6db74>&#34;{{ ssh_location }}&#34;</span>
+        <span style=color:#66d9ef>tags</span>:
+          <span style=color:#66d9ef>stack</span>: <span style=color:#e6db74>&#34;{{ stack_name }}&#34;</span>
+</code></pre></div><h3 id=getting-the-deployed-instances-information>Getting the deployed instances information</h3><p>Once the stack creation is finished, we run the second task to get the information of the EC2 instances created. The <a href=https://docs.ansible.com/ansible/latest/modules/ec2_instance_info_module.html><code>ec2_instance_info</code></a> module allows us to query AWS to the required information.</p><p>Remember the tags we used earlier, this is how we use the <code>filters</code> parameter to identify those instances. Once all the instances are queried, we add them to a list <code>ec2_list</code> that will be used in the next task.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml>    - <span style=color:#66d9ef>name</span>: Get ec2 instances info
+      <span style=color:#66d9ef>ec2_instance_info</span>:
+        <span style=color:#66d9ef>region</span>: <span style=color:#e6db74>&#34;{{ region }}&#34;</span>
+        <span style=color:#66d9ef>filters</span>:
+          <span style=color:#66d9ef>&#34;tag:stack&#34;: </span><span style=color:#e6db74>&#34;{{ stack_name }}&#34;</span>
+          <span style=color:#66d9ef>instance-state-name</span>: [ <span style=color:#e6db74>&#34;running&#34;</span> ]
+      <span style=color:#66d9ef>register</span>: ec2_list
+</code></pre></div><h3 id=adding-the-instances-to-inventory>Adding the instances to inventory</h3><p>Since the EC2 resource creation is dynamic, which is why we queried and got the list of EC2 instances in our <code>ec2_list</code> earlier. We can loop through items in this list and add it to an in-memory inventory that Ansible can use in the next part of the playbook.</p><ul><li>Using the <a href=https://docs.ansible.com/ansible/latest/user_guide/playbooks_loops.html><code>loop</code></a> keyword, we can run the <a href=https://docs.ansible.com/ansible/latest/modules/add_host_module.html><code>add_host</code></a> task for each item in the <code>ec2_list</code>.</li><li>Instance information is stored in the key <code>instances</code> which is how we are referencing with <code>{{ ec2_list['instances'] }}</code> in the <a href=https://docs.ansible.com/ansible/latest/user_guide/playbooks_loops.html#with-items><code>loop</code></a> value.</li><li>We get the instances properties using the format <code>"{{ item.property }}"</code> and reference them in the proper parameters.</li><li>Note how we are adding the host to <code>groups</code>. We have set a few groups so that we can classify these hosts and decide which tasks to run on specific groups. Here, we&rsquo;re using the <code>env</code> and <code>app</code> tag values as groups.</li></ul><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml>    - <span style=color:#66d9ef>name</span>: Add instances to inventory
+      <span style=color:#66d9ef>add_host</span>:
+        <span style=color:#66d9ef>name</span>: <span style=color:#e6db74>&#34;{{ item.public_dns_name }}&#34;</span>
+        <span style=color:#66d9ef>ansible_user</span>: ec2-user
+        <span style=color:#66d9ef>host_key_checking</span>: <span style=color:#66d9ef>false</span>
+        <span style=color:#66d9ef>groups</span>: <span style=color:#e6db74>&#34;aws,{{ item.tags.env }},{{ item.tags.app }}&#34;</span>
+      <span style=color:#66d9ef>no_log</span>: <span style=color:#66d9ef>true</span>
+      <span style=color:#66d9ef>when</span>: ec2_list.instances|length &gt; <span style=color:#ae81ff>0</span>
+      <span style=color:#66d9ef>loop</span>: <span style=color:#e6db74>&#34;{{ ec2_list[&#39;instances&#39;] | flatten(levels=1) }}&#34;</span>
+</code></pre></div><h3 id=configuring-the-instances>Configuring the Instances</h3><p>The next section of the playbook is where we target specific hosts and run the tasks to configure them.</p><ul><li>We&rsquo;re going to create another play, that targets the <code>aws</code> group of hosts (which would match all the EC2 instances we added to inventory earlier).</li><li>We have set a variable <code>ansible_ssh_common_args</code> to ignore the host key checking for testing purposes (as we are frequently running this playbook for testing)</li><li><a href=https://docs.ansible.com/ansible/latest/modules/wait_for_connection_module.html><code>wait_for_connection</code></a> module is used to ensure that the instances are reachable.</li></ul><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml>- <span style=color:#66d9ef>hosts</span>: aws
+  <span style=color:#66d9ef>gather_facts</span>: <span style=color:#66d9ef>false</span>
+  <span style=color:#66d9ef>vars</span>:
+    <span style=color:#66d9ef>ansible_ssh_common_args</span>: <span style=color:#e6db74>&#34;-o StrictHostKeyChecking=no&#34;</span>
+  <span style=color:#66d9ef>tasks</span>:
+    - <span style=color:#66d9ef>name</span>: wait for instances to become available
+      <span style=color:#66d9ef>wait_for_connection</span>:
+
+    - <span style=color:#66d9ef>name</span>: Gather facts for first time
+      <span style=color:#66d9ef>setup</span>:
+</code></pre></div><h2 id=running-the-playbook>Running the Playbook</h2><p>In order to run the playbook we use the <code>ansible-playbook</code> command.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback>ansible-playbook provision.yml --private-key my-key-pair.pem
+</code></pre></div><ul><li><p>We have provided the option <code>--private-key my-key-pair.pem</code> so that Ansible uses specifically this key to access the instances.</p></li><li><p>The progress is shown on the terminal.</p></li></ul><p><img src=/images/post-images/ansible_cfn_playbook_run.png alt=image_ansible_playbook_run></p><ul><li>We can deploy more stacks afer changing the variable <code>stack_name</code> in the playbook.
+<img src=/images/post-images/ansible_cfn_stacks.png alt=image_ansible_cloudformation_stacks></li></ul><h2 id=next-steps>Next Steps</h2><p>Now that we have our instances ready, we can have other plays that continues to configure these instances.</p><p>For example we can target the <code>web</code> group to setup the web application as shown below.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-yaml data-lang=yaml>- <span style=color:#66d9ef>hosts</span>: web
+  <span style=color:#66d9ef>gather_facts</span>: <span style=color:#66d9ef>false</span>
+  <span style=color:#66d9ef>vars</span>:
+    <span style=color:#66d9ef>ansible_ssh_common_args</span>: <span style=color:#e6db74>&#34;-o StrictHostKeyChecking=no&#34;</span>
+  <span style=color:#66d9ef>tasks</span>:
+    - <span style=color:#66d9ef>name</span>: install nginx
+      <span style=color:#66d9ef>yum</span>:
+        ...
+    - <span style=color:#66d9ef>name</span>: setup app
+      ...
+
+- <span style=color:#66d9ef>hosts</span>: db
+  <span style=color:#66d9ef>gather_facts</span>: <span style=color:#66d9ef>false</span>
+  <span style=color:#66d9ef>vars</span>:
+    <span style=color:#66d9ef>ansible_ssh_common_args</span>: <span style=color:#e6db74>&#34;-o StrictHostKeyChecking=no&#34;</span>
+  <span style=color:#66d9ef>tasks</span>:
+    - <span style=color:#66d9ef>name</span>: install mysql
+      <span style=color:#66d9ef>yum</span>:
+        ...
+    - <span style=color:#66d9ef>name</span>: configure database
+      ...
+
+</code></pre></div><p>There are a number of ways such as a single playbook or making use of roles. This guide won&rsquo;t go to the details of how Ansible does it&rsquo;s configuration as that is a whole post on it&rsquo;s own. Stay tuned for the guide specific to Ansible playbooks and roles.</p><h2 id=conclusion>Conclusion</h2><p>To recap, we have seen how CloudFormation template is used to create the resources on AWS. We have also written an Ansible playbook that uses that template to create a stack on AWS, query and add the created instances to an in-memory inventory. We can now target hosts in that inventory with other plays that does the configuration.</p><p>With this method, CloudFormation ensures that the required resources are present and organized in stacks, while we can configure the guest OS on the instances with Ansible as much as needed. We are also able to quickly discard of all the resources once we are done with it (as the phrase goes&mldr; &ldquo;Cattles, not Pets&rdquo;).</p><p>If you found this guide helpful or have any feedback @ me on <a href=https://twitter.com/monde_>Twitter</a>.</p><h2 id=references>References</h2><ul><li><a href=https://www.ansiblefordevops.com/>Ansible for DevOps</a> by <a href=https://twitter.com/geerlingguy>Jeff Geerling</a></li><li><a href=https://gumroad.com/l/become-ansible>become Ansible</a> by <a href=https://twitter.com/joshduffney/>Josh Duffney</a></li><li><a href=https://github.com/Duffney/becomeansible>become Ansible Github Repo</a></li></ul></div><div class=tags><div class=taxosfloating_left><p>Categories</p></div><div class=termsfloating_right><p><a href=/categories/guide/>guide</a></div><div class=clearit></div><div class=taxosfloating_left><p>Tags</p></div><div class=termsfloating_right><p><a href=/tags/ansible/>ansible</a>
+<a href=/tags/aws/>aws</a>
+<a href=/tags/cloudformation/>cloudformation</a>
+<a href=/tags/devops/>devops</a>
+<a href=/tags/iac/>iac</a></div><div class=clearit></div></div></div></main><footer><a href=https://github.com/dataCobra/hugo-vitae>Vitae</a> theme for <a href=https://gohugo.io>Hugo</a>
+<script type=application/javascript>var doNotTrack=false;if(!doNotTrack){window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-166606040-1','auto');ga('send','pageview');}</script><script async src=https://www.google-analytics.com/analytics.js></script></footer></body></html>
