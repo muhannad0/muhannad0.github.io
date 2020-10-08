@@ -1,0 +1,103 @@
+<!doctype html><html lang=en><head><meta name=generator content="Hugo 0.69.0"><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv=x-ua-compatible content="IE=edge"><meta name=author content="Mohamed Muhannad"><meta name=keywords content="aws,terraform,infra-as-code"><meta name=description content="In this post, I explain how we can make use of Terraform modules to create reusable and flexible configurations to build cloud infrastructure. This is more of an overview of the concept and usage of modules. There will definitely be more with details of the actual implementation."><meta property="og:title" content="Building Cloud Infra Using Terraform Modules - Part 1 (Concept of Modules)"><meta property="og:description" content="In this post, I explain how we can make use of Terraform modules to create reusable and flexible configurations to build cloud infrastructure. This is more of an overview of the concept and usage of modules. There will definitely be more with details of the actual implementation."><meta property="og:type" content="article"><meta property="og:url" content="https://muhannad0.github.io/post/building-cloud-infra-using-terraform-modules-part1-modules-concept/"><meta property="og:image" content="https://muhannad0.github.io/images/post-images/tf_modules_cover_image.png"><meta property="article:published_time" content="2020-10-08T06:50:59+05:00"><meta property="article:modified_time" content="2020-10-08T06:50:59+05:00"><meta name=twitter:card content="summary_large_image"><meta name=twitter:image content="https://muhannad0.github.io/images/post-images/tf_modules_cover_image.png"><meta name=twitter:title content="Building Cloud Infra Using Terraform Modules - Part 1 (Concept of Modules)"><meta name=twitter:description content="In this post, I explain how we can make use of Terraform modules to create reusable and flexible configurations to build cloud infrastructure. This is more of an overview of the concept and usage of modules. There will definitely be more with details of the actual implementation."><link rel=icon type=image/png href=/favicon-32x32.png sizes=32x32><link rel=icon type=image/png href=/favicon-16x16.png sizes=16x16><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/normalize.css><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/main.css><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/all.css><link rel=stylesheet href=https://muhannad0.github.io/css/katex.min.css crossorigin=anonymous><script defer src=https://muhannad0.github.io/js/katex.min.js integrity=sha384-y23I5Q6l+B6vatafAwxRu/0oK/79VlbSz7Q9aiSZUvyWYIYsd+qj+o24G5ZU2zJz crossorigin=anonymous></script><script defer src=https://muhannad0.github.io/js/auto-render.min.js integrity=sha384-kWPLUVMOks5AQFrykwIup5lo0m3iMkkHrD0uJ4H5cjeGihAutqP0yW0J6dpFiVkI crossorigin=anonymous onload=renderMathInElement(document.body);></script><link rel=stylesheet type=text/css media=screen href=https://muhannad0.github.io/css/css/custom.css><title>Building Cloud Infra Using Terraform Modules - Part 1 (Concept of Modules) | Muhannad.0</title></head><body><header><div id=avatar><a href=https://muhannad0.github.io/><img src=/images/avatar.jpg alt=Muhannad.0></a></div><div id=titletext><h2 id=title><a href=https://muhannad0.github.io/>Muhannad.0</a></h2></div><div id=title-description><p id=subtitle>mostly about cloud, automation, IT infra, ops. but wait, there&rsquo;s more&mldr;</p><div id=social><nav><ul><li><a href=https://github.com/muhannad0/><i title=Github class="icons fab fa-github"></i></a></li><li><a href=https://www.linkedin.com/in/muhannad0/><i title=LinkedIn class="icons fab fa-linkedin"></i></a></li><li><a href=https://twitter.com/monde_><i title=Twitter class="icons fab fa-twitter"></i></a></li></ul></nav></div></div><div id=mainmenu><nav><ul><li><a href=/>Home</a></li><li><a href=/post>All Posts</a></li><li><a href=/about>About</a></li><li><a href=/tags>Tags</a></li><li><a href=/categories>Categories</a></li></ul></nav></div></header><main><div class=post><div class=author></div><div class=post-header><div class=meta><div class=date><span class=day>08</span>
+<span class=rest>Oct 2020</span></div></div><div class=matter><h1 class=title>Building Cloud Infra Using Terraform Modules - Part 1 (Concept of Modules)</h1></div></div><div class=markdown><p>I’ve been using <a href=http://terraform.io/>Terraform</a> to deploy machines to our VMware clusters for a while now. But that has been just straightforward VM creation from a template. Nothing too fancy.</p><p>I wanted to learn more in-depth about how to really leverage Terraform, to create the necessary infrastructure components. I came across this concept of using modules to have a generic definition for a resource(s), that can be used by others to create the same type of resource(s) by passing in a few parameters.</p><p>The concept comes from software development practices where you create a module that does one thing and have other parts of the application call that module to perform a certain function. Similarly, by using Terraform modules, we can have a configuration call a module to create a group of resources with the parameters that we provide.</p><p>I wanted to give an overview of the concept and usage of modules in this post. There will definitely be more coming soon, where I go into detail with the actual implementation.</p><h2 id=scenario>Scenario</h2><p>To help understand the concept of modules better, let’s look at an example of deploying a simple web application to AWS. The diagram below should give the overall idea of what we are trying to build out. (Yes, it’s not a production grade setup, but for simplicity let’s go with this).</p><p><img src=/images/post-images/tf_modules_p1_sample_architecture.png alt=sample_architecture></p><h3 id=explanation>Explanation</h3><p>For this web application to run we need the following resources:</p><ul><li>An Application Load Balancer (ALB)</li><li>An Auto Scaling Group (ASG)</li><li>A Relational Database Service (MySQL RDS)</li><li>An S3 bucket (S3)</li></ul><h2 id=approaches-using-infra-as-code-with-terraform>Approaches using Infra-as-Code with Terraform</h2><h3 id=configuration-in-a-single-file>Configuration in a single file</h3><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$:~/tf-infra-demo/single-config$ tree -a
+.
+├── main.tf
+├── outputs.tf
+└── variables.tf
+
+<span style=color:#ae81ff>0</span> directories, <span style=color:#ae81ff>3</span> files
+</code></pre></div><p>At first glance, this looks like a simple configuration. A few 100s of lines in a single <code>main.tf</code> file should have us up and running in no time, right? Um, yeah.. it would get the job done. But…</p><p>What if you need to modify a parameter, would you be able to make those changes everywhere that parameter is required need? Would you remember to update any references that reflect that change? The chances for mistakes and stuff breaking is too high when you have a huge codebase.</p><p><img src=/images/post-images/tf_modules_p1_tf_scroller.gif alt=tf_scroll></p><p>After all, who would want to be the one that breaks the service because of a typo or misconfiguration? Right, no one. So, we should minimize the chances of making mistakes.</p><h3 id=configuration-file-per-type-of-resource>Configuration File per Type of Resource</h3><p>Alright then. Let’s try to break down the configuration to manageable pieces. Based on the type of services required we can probably have a grouped structure like this:</p><ul><li>An ALB configuration</li><li>An ASG configuration</li><li>A MySQL RDS configuration</li><li>An S3 Bucket</li></ul><p>For a simple project this is a manageable approach. You can ensure each configuration is maintained separately and dependencies are handled.</p><p>But this approach quickly becomes a problem if you have different environments (dev, stage, prod) of your infrastructure. You would need to have multiple copies of your configuration. This might lead to inconsistencies between each configuration in each environment if you forgot to make the changes across every configuration.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$:~/tf-infra-demo/resource-type-config$ tree -a
+.
+└── live
+    ├── prod
+    │   ├── alb.tf
+    │   ├── mysql-rds.tf
+    │   ├── outputs.tf
+    │   ├── s3.tf
+    │   ├── variables.tf
+    │   └── web-app-asg.tf
+    └── stage
+        ├── alb.tf
+        ├── mysql-rds.tf
+        ├── outputs.tf
+        ├── s3.tf
+        ├── variables.tf
+        └── web-app-asg.tf
+
+<span style=color:#ae81ff>3</span> directories, <span style=color:#ae81ff>12</span> files
+</code></pre></div><p>How could we make a configuration such that we pass in a few parameters and immediately get all the resources we want? Yes, using modules.</p><h2 id=configuration-files-using-modules>Configuration Files using Modules</h2><p>We are finally at the real topic of this post. You might be wondering how using a module would help make things better. Let’s try this approach and see how it affects the usage of deploying infrastructure.
+We can think of it as each service is a module. In this example, we have 2 services:</p><ul><li>A web app service (an ASG cluster with ALB and S3 bucket for storage)</li><li>A database service (a MySQL RDS)</li></ul><h3 id=web-app-module>Web App Module</h3><p>The <code>web-app</code> service module would deploy the required web application into an ASG cluster with an ALB in front of it so that we can access it. It would also deploy the necessary S3 bucket to use for object storage.</p><p>To deploy this service module, we would only ask for a few variables:</p><ul><li>Environment</li><li>Cluster configurations (min, max, desired number and type of instances, custom tags)</li></ul><h3 id=mysql-database-module>MySQL Database Module</h3><p>The <code>mysql-db</code> service module would deploy an RDS MySQL instance that the “web-app” can use as a database.</p><p>To deploy service module, we would only ask to provide variables like:</p><ul><li>Environment</li><li>Database configuration (DB name, user, password, service port)</li></ul><h3 id=example-of-deploying-a-web-app-module>Example of Deploying a “web-app” module.</h3><p>It may not be clear as to how this would work out practically, so looking at an example should help.
+The directory structure for the project is as follows:</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash>$:~/tf-infra-demo/modules-config$ tree -a
+.
+├── live
+│   ├── prod
+│   │   ├── main.tf
+│   │   └── outputs.tf
+│   └── stage
+│       ├── main.tf
+│       └── outputs.tf
+└── modules
+    ├── mysql-db
+    │   ├── main.tf
+    │   ├── outputs.tf
+    │   └── variables.tf
+    └── web-app
+        ├── main.tf
+        ├── outputs.tf
+        └── variables.tf
+
+<span style=color:#ae81ff>6</span> directories, <span style=color:#ae81ff>10</span> files
+</code></pre></div><ul><li><p><code>Live</code> folder contains the different deploy environments.</p></li><li><p><code>Modules</code> folder contains the service modules.</p></li></ul><p>Let&rsquo;s take a look at how we used a module in the deploy configurations.</p><ul><li>For our Web App service in <code>stage</code> environment, we have the following configuration.</li></ul><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-terraform data-lang=terraform><span style=color:#960050;background-color:#1e0010>terraform</span> {
+<span style=color:#a6e22e>    required_version</span> <span style=color:#f92672>=</span><span style=color:#a6e22e> &#34;&gt;</span><span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>.<span style=color:#ae81ff>13</span><span style=color:#960050;background-color:#1e0010>&#34;</span>
+}
+
+<span style=color:#66d9ef>provider</span> <span style=color:#e6db74>&#34;aws&#34;</span> {
+<span style=color:#a6e22e>    region</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;us-east-1&#34;</span>
+}
+
+<span style=color:#66d9ef>module</span> <span style=color:#e6db74>&#34;web_app&#34;</span> {
+<span style=color:#a6e22e>    source</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;../../modules/web-app&#34;</span>
+
+<span style=color:#a6e22e>    environment</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;stage&#34;</span>
+
+<span style=color:#a6e22e>    instance_type</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;t2.micro&#34;</span>
+<span style=color:#a6e22e>    min_size</span> <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>
+<span style=color:#a6e22e>    max_size</span> <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>
+<span style=color:#a6e22e>    desired_capacity</span> <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>
+
+<span style=color:#a6e22e>    enable_autoscaling</span> <span style=color:#f92672>=</span> <span style=color:#66d9ef>false</span>
+
+<span style=color:#a6e22e>    server_text</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;Hello World Stage&#34;</span><span style=color:#75715e>
+</span><span style=color:#75715e>
+</span><span style=color:#75715e>    # pass all output from db-dev to mysql_config
+</span><span style=color:#75715e></span><span style=color:#a6e22e>    mysql_config</span> <span style=color:#f92672>=</span> <span style=color:#960050;background-color:#1e0010>data</span>.<span style=color:#960050;background-color:#1e0010>terraform_remote_state</span>.<span style=color:#960050;background-color:#1e0010>db_stage</span>.<span style=color:#960050;background-color:#1e0010>outputs</span>
+}
+</code></pre></div><p>For the same Web App service in <code>prod</code> environment, we have the following configuration.</p><div class=highlight><pre style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-terraform data-lang=terraform><span style=color:#960050;background-color:#1e0010>terraform</span> {
+<span style=color:#a6e22e>    required_version</span> <span style=color:#f92672>=</span><span style=color:#a6e22e> &#34;&gt;</span><span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>.<span style=color:#ae81ff>13</span><span style=color:#960050;background-color:#1e0010>&#34;</span>
+}
+
+<span style=color:#66d9ef>provider</span> <span style=color:#e6db74>&#34;aws&#34;</span> {
+<span style=color:#a6e22e>    region</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;us-east-1&#34;</span>
+}
+
+<span style=color:#66d9ef>module</span> <span style=color:#e6db74>&#34;web_app&#34;</span> {
+<span style=color:#a6e22e>    source</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;../../modules/web-app&#34;</span>
+
+<span style=color:#a6e22e>    environment</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;prod&#34;</span>
+
+<span style=color:#a6e22e>    instance_type</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;m4.large&#34;</span>
+<span style=color:#a6e22e>    min_size</span> <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>
+<span style=color:#a6e22e>    max_size</span> <span style=color:#f92672>=</span> <span style=color:#ae81ff>6</span>
+<span style=color:#a6e22e>    desired_capacity</span> <span style=color:#f92672>=</span> <span style=color:#ae81ff>4</span>
+
+<span style=color:#a6e22e>    enable_autoscaling</span> <span style=color:#f92672>=</span> <span style=color:#66d9ef>true</span>
+
+<span style=color:#a6e22e>    server_text</span> <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;Hello World Prod&#34;</span><span style=color:#75715e>
+</span><span style=color:#75715e>
+</span><span style=color:#75715e>    # pass all output from db-dev to mysql_config
+</span><span style=color:#75715e></span><span style=color:#a6e22e>    mysql_config</span> <span style=color:#f92672>=</span> <span style=color:#960050;background-color:#1e0010>data</span>.<span style=color:#960050;background-color:#1e0010>terraform_remote_state</span>.<span style=color:#960050;background-color:#1e0010>db_prod</span>.<span style=color:#960050;background-color:#1e0010>outputs</span>
+}
+</code></pre></div><p>With only a single module resource block, and couple of parameters, we can deploy the web application service however we want.</p><h2 id=advantages>Advantages</h2><p>This type of abstraction helps us keep the deploy configurations simple and flexible. The developers wouldn’t have to think of how the actual implementation is done. They can independently maintain the deploy configurations for each environment.</p><p>Another, advantage is that we can update the modules and have a versioned release that ensures there won’t be breaking changes. This helps us to add new features to the modules (for example, better monitoring, autoscaling rules for the Web App module) and test them out separately without affecting actual deploy environments. Once they have been tested, we can upgrade the live environments as needed.</p><h2 id=caveats>Caveats</h2><p>I’ve found that there is a lot of planning involved when developing modules. Some of them are:</p><ul><li>How do we handle dependencies and grouping of resources into a single module?</li><li>What are the configurable variables that need to be exposed?</li><li>How do we reference resources made by other modules?</li><li>How do we test a module to make sure it’s production ready?</li></ul><p>Now, this might be a bit overkill for a simple project like this. But in larger projects, this approach would help keeps things simple in the long-term.</p><h2 id=conclusion>Conclusion</h2><p>In summary, we have seen a few approaches on how we can develop Terraform configurations for a small project. Using modules enables us to have a reusable and configurable piece of the infrastructure that can be deployed to various environments.</p><p>The use of such abstractions can help keep things simple and error free. It also provides a faster way to get the infrastructure resources up and running.</p><p>In the next post (in this series), I plan to go into detail about the actual implementation of this concept.</p><h2 id=references>References</h2><p>This example architecture and concept was borrowed from the book <a href=https://www.terraformupandrunning.com/>Terraform: Up and Running</a> by <a href=https://twitter.com/brikis98>Yevgeniy Brikman</a>. If you need a resource to understand and practice Terraform concepts and best practices, this is the one I recommend getting.</p><p>If you&rsquo;d like to talk more about Terraform or any other tech, say hello on <a href=https://twitter.com/monde_>Twitter</a>.</p></div><div class=tags><div class=taxosfloating_left><p>Categories</p></div><div class=termsfloating_right><p><a href=/categories/guide/>guide</a></div><div class=clearit></div><div class=taxosfloating_left><p>Tags</p></div><div class=termsfloating_right><p><a href=/tags/aws/>aws</a>
+<a href=/tags/infra-as-code/>infra-as-code</a>
+<a href=/tags/terraform/>terraform</a></div><div class=clearit></div></div></div></main><footer><a href=https://github.com/dataCobra/hugo-vitae>Vitae</a> theme for <a href=https://gohugo.io>Hugo</a>
+<script type=application/javascript>var doNotTrack=false;if(!doNotTrack){window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-166606040-1','auto');ga('send','pageview');}</script><script async src=https://www.google-analytics.com/analytics.js></script></footer></body></html>
